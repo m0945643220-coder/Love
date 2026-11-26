@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>มีอะไรจะบอก ♥</title>
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg1:#1a0b2e;--bg2:#05030d;--fg:#fff;--pink:#ff5c8a;--card:rgba(255,255,255,.08);box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:radial-gradient(ellipse at 50% 100%,var(--bg1),var(--bg2));color:var(--fg);font-family:'Mitr','Noto Sans Thai',sans-serif;overflow:hidden;touch-action:manipulation}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+.panel{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;transition:opacity .6s}
+.panel.hide{opacity:0;pointer-events:none}
+.card{background:var(--card);border:1px solid rgba(255,255,255,.15);border-radius:24px;padding:28px 24px;width:min(360px,100%);backdrop-filter:blur(8px)}
+h1{margin:0 0 6px;font-weight:500;font-size:28px}
+p{margin:0 0 16px;opacity:.8}
+input{width:100%;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.3);color:var(--fg);font:inherit;text-align:center;margin-bottom:14px}
+button{font:inherit;border:0;border-radius:999px;padding:12px 28px;color:#fff;background:linear-gradient(135deg,#ff5c8a,#ff8f5c);cursor:pointer;font-size:18px;box-shadow:0 6px 24px rgba(255,92,138,.45)}
+button:active{transform:scale(.96)}
+#ask{justify-content:flex-end;padding-bottom:12vh}
+.row{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+#no{background:rgba(255,255,255,.14);box-shadow:none;position:relative;transition:left .15s,top .15s}
+#msg{font-size:22px;min-height:34px}
+#lkbox{display:none;margin-top:14px;font-size:13px}.sm{padding:10px 20px;font-size:16px;margin:4px}
+#again{position:fixed;right:16px;bottom:calc(14px + env(safe-area-inset-bottom,0px));background:none;box-shadow:none;font-size:14px;opacity:.5;padding:6px 10px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div class="panel" id="intro">
+  <div class="card">
+    <h1>มีอะไรจะบอก ♥</h1>
+    <p id="sub">ใส่ชื่อคนพิเศษ แล้วสร้างลิงก์ส่งให้เขาได้เลย</p>
+    <input id="name" maxlength="14" placeholder="ชื่อคนพิเศษ (ไม่ใส่ก็ได้)" autocomplete="off">
+    <button id="go" class="sm">ดูตัวอย่าง</button>
+    <button id="mk" class="sm">สร้างลิงก์ส่งให้เขา</button>
+    <div id="lkbox"><input id="lk" readonly><div id="lkmsg">คัดลอกลิงก์แล้ว ส่งให้เขาได้เลย ♥</div></div>
+  </div>
+</div>
+
+<div class="panel hide" id="ask">
+  <div id="msg"></div>
+  <div class="row">
+    <button id="yes">ได้เลย ♥</button>
+    <button id="no">ขอคิดดูก่อน</button>
+  </div>
+</div>
+<button class="hide" id="again" style="display:none">ดูอีกรอบ ↻</button>
+
+<script>
+const cv=document.getElementById('c'),X=cv.getContext('2d');
+let W,H,D;
+function size(){D=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*D;cv.height=H*D;X.setTransform(D,0,0,D,0,0)}
+addEventListener('resize',size);size();
+
+const P=[],R=[];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const ease=t=>1-Math.pow(1-t,3);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const hues=[340,350,320,45,20,280];
+
+function targets(text){
+  const o=document.createElement('canvas'),c=o.getContext('2d');
+  const L=text.split('\n'),OH=500,CY=OH/2;
+  o.width=W;o.height=OH;
+  let fs=150;const f=s=>`500 ${s}px Mitr,'Noto Sans Thai',sans-serif`;
+  c.font=f(fs);
+  const w=Math.max(...L.map(t=>c.measureText(t).width));
+  fs=Math.min(fs,Math.floor(fs*W*.86/w),Math.floor(OH*.9/L.length/1.5));
+  c.font=f(fs);c.textAlign='center';c.textBaseline='middle';c.fillStyle='#fff';c.strokeStyle='#fff';c.lineWidth=fs*.03;c.lineJoin='round';
+  const lh=fs*1.5;
+  L.forEach((t,i)=>{const yy=CY+(i-(L.length-1)/2)*lh;c.strokeText(t,W/2,yy);c.fillText(t,W/2,yy)});
+  const d=c.getImageData(0,0,W,OH).data,step=Math.max(4,Math.round(fs/19)),pts=[];
+  for(let y=0;y<OH;y+=step)for(let x=0;x<W;x+=step)if(d[((y|0)*W+(x|0))*4+3]>100)pts.push([x-W/2,y-CY]);
+  pts.step=step;return pts;
+}
+
+function rocket(tx,ty,cb){
+  R.push({sx:W/2+rnd(-60,60),sy:H,tx,ty,t:0,cb});
+}
+
+function textBurst(x,y,text){
+  const pts=targets(text),base=rnd(0,360);
+  const hue=hues[Math.floor(Math.random()*hues.length)];
+  for(const [px,py] of pts){
+    const a=Math.random()*6.283,s=rnd(80,420);
+    P.push({m:1,x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,tx:x+px,ty:y+py,age:0,life:4.2,h:hue+rnd(-18,18),s:pts.step*.4});
+  }
+}
+
+function radial(x,y,n=60){
+  const h=rnd(0,360);
+  for(let i=0;i<n;i++){
+    const a=Math.random()*6.283,s=rnd(60,300);
+    P.push({m:0,x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,age:0,life:rnd(1.2,2),h:h+rnd(-25,25),s:rnd(1.2,2.4)});
+  }
+}
+
+function shoot(text,y){
+  return new Promise(res=>rocket(W/2,y,()=>{textBurst(W/2,y,text);radial(W/2,y,30);res()}));
+}
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  X.globalCompositeOperation='destination-out';
+  X.fillStyle='rgba(0,0,0,.28)';X.fillRect(0,0,W,H);
+  X.globalCompositeOperation='lighter';
+  for(let i=R.length-1;i>=0;i--){
+    const r=R[i];r.t+=dt/.9;
+    const e=ease(Math.min(r.t,1)),x=r.sx+(r.tx-r.sx)*e,y=r.sy+(r.ty-r.sy)*e;
+    P.push({m:0,x,y,vx:rnd(-15,15),vy:rnd(10,50),age:0,life:.5,h:40,s:1.6});
+    if(r.t>=1){R.splice(i,1);r.cb()}
+  }
+  for(let i=P.length-1;i>=0;i--){
+    const p=P[i];p.age+=dt;
+    let a;
+    if(p.m){
+      if(p.age<.45){p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=.93;p.vy*=.93;a=1}
+      else if(p.age<p.life-.9){const k=Math.min(1,dt*7);p.x+=(p.tx-p.x)*k;p.y+=(p.ty-p.y)*k;a=1}
+      else{p.vy=(p.vy>0?p.vy:0)+260*dt;p.y+=p.vy*dt;a=Math.max(0,(p.life-p.age)/.9)}
+    }else{
+      p.vy+=140*dt;p.vx*=.98;p.x+=p.vx*dt;p.y+=p.vy*dt;a=Math.max(0,1-p.age/p.life);
+    }
+    if(p.age>=p.life){P.splice(i,1);continue}
+    X.fillStyle=`hsla(${p.h},100%,${p.m?58:62}%,${a})`;
+    X.beginPath();X.arc(p.x,p.y,p.s,0,6.283);X.fill();
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+const $=id=>document.getElementById(id);
+let running=false;
+async function show(){
+  if(running)return;running=true;
+  $('again').style.display='none';
+  $('ask').classList.add('hide');$('msg').textContent='';
+  const name=$('name').value.trim();
+  try{await document.fonts.load('500 100px Mitr')}catch(e){}
+  const y=H*.34;
+  await sleep(500);
+  await shoot(name?`ถึง ${name}`:'ถึงเธอ',y);await sleep(3200);
+  await shoot('ชอบเธอนะ',y);await sleep(3200);
+  await shoot('ขอเป็น\nคนคุย',y);await sleep(3200);
+  await shoot('ได้ไหม ♥',y);await sleep(2200);
+  $('msg').textContent='ว่าไงคะ/ครับ… ?';
+  resetNo();
+  $('ask').classList.remove('hide');
+  running=false;
+}
+$('go').onclick=()=>{$('intro').classList.add('hide');show()};
+const BASE=location.href.split('#')[0];
+const hex=s=>[...new TextEncoder().encode(s)].map(b=>b.toString(16).padStart(2,'0')).join('');
+const unhex=h=>{try{return new TextDecoder().decode(new Uint8Array((h.match(/../g)||[]).map(x=>parseInt(x,16))))}catch(e){return ''}};
+const hm=location.hash.match(/^#to-([0-9a-f]*)$/);
+if(hm){
+  $('name').value=unhex(hm[1]);
+  $('name').style.display='none';$('mk').style.display='none';
+  $('sub').textContent='มีคนฝากอะไรมาบอก เปิดเสียงไว้แล้วแตะเลย';
+  $('go').textContent='แตะเพื่อเปิด';$('go').classList.remove('sm');
+}
+$('mk').onclick=()=>{
+  const u=BASE+'#to-'+hex($('name').value.trim());
+  $('lk').value=u;$('lkbox').style.display='block';
+  $('lk').focus();$('lk').select();
+  try{navigator.clipboard.writeText(u)}catch(e){$('lkmsg').textContent='กดค้างที่ช่องแล้วเลือกคัดลอกลิงก์'}
+};
+$('again').onclick=show;
+
+const no=$('no');let tries=0;
+const lines=['อ้าว กดไม่โดนนะ','ลองใหม่อีกที','คิดดีๆ นะ…','กดปุ่มข้างๆ ดีกว่านะ ♥'];
+function resetNo(){tries=0;no.style.left='0';no.style.top='0';no.textContent='ขอคิดดูก่อน'}
+function dodge(e){
+  e.preventDefault();
+  tries++;
+  const r=no.getBoundingClientRect(),mx=Math.min(120,W/2-r.width/2-10);
+  no.style.left=rnd(-mx,mx)+'px';no.style.top=rnd(-110,40)+'px';
+  $('msg').textContent=lines[Math.min(tries-1,lines.length-1)];
+}
+no.addEventListener('pointerenter',dodge);
+no.addEventListener('pointerdown',dodge);
+
+$('yes').onclick=async()=>{
+  $('ask').classList.add('hide');
+  const y=H*.34;
+  for(let i=0;i<10;i++)setTimeout(()=>radial(rnd(W*.1,W*.9),rnd(H*.1,H*.5),70),i*180);
+  await sleep(600);
+  await shoot('ขอบคุณนะ',y*.8);
+  await sleep(1800);
+  await shoot('จากนี้\nฝากด้วย ♥',y*1.4);
+  const t=setInterval(()=>radial(rnd(W*.1,W*.9),rnd(H*.08,H*.7),60),500);
+  setTimeout(()=>clearInterval(t),9000);
+  await sleep(9000);
+  $('again').style.display='block';
+};
+</script>
+</body>
+</html>
